@@ -1,0 +1,258 @@
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvc-unknown81311
+spec:
+  capacity:
+    storage: 10Gi
+  hostPath:
+    path: >-
+      /var/lib/rancher/k3s/storage/pvc-unknown81311_cdn-pvc
+    type: DirectoryOrCreate
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: local-path
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - k3s-03
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: unknown81311-cdn-pvc
+  namespace: webapps-prod
+  annotations:
+    volume.beta.kubernetes.io/storage-provisioner: rancher.io/local-path
+    volume.kubernetes.io/selected-node: k3s-03
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: pvc-unknown81311
+  storageClassName: local-path
+  volumeMode: Filesystem
+
+
+---
+
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cdn-unknown81311-nginx-conf
+  namespace: webapps-prod
+data:
+  nginx.conf: |
+    user  nginx;
+    worker_processes  auto;
+
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include mime.types;
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        default_type  application/octet-stream;
+
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+        gzip on;
+        gzip_comp_level 6;
+        gzip_types *;
+        gzip_static on;
+
+        index index.html;
+
+        server {
+            listen 80;
+            listen [::]:80;
+
+            server_name bd.dotglitch.dev;
+
+            try_files $uri $uri/ /index.html;
+
+            location / {
+                index index.html;
+                expires -1;
+                etag off;
+                add_header Pragma "no-cache";
+                add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
+                autoindex on;
+            }
+
+            location ~* \.(jpg|jpeg|png|gif|js|css|map|svg|wasm|woff|woff2|ttf|eot|mp4|ico)$ {
+                expires 1y;
+                etag off;
+                if_modified_since off;
+                add_header Cache-Control "public, no-transform";
+            }
+
+            location ~* \.(json)$ {
+                expires -1;
+                etag off;
+
+                # Overwrite normal JSON headers to exact values
+                add_header Pragma "no-cache";
+                add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
+            }
+
+            root /data;
+        }
+    }
+
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdn-unknown81311-server
+  namespace: webapps-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cdn-unknown81311-server
+      namespace: webapps-prod
+
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: cdn-unknown81311-server
+        namespace: webapps-prod
+    spec:
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: unknown81311-cdn-pvc
+        - name: config
+          configMap:
+            name: cdn-unknown81311-nginx-conf
+            defaultMode: 420
+      containers:
+        - name: dotglitch
+          image: harbor.dotglitch.dev/library/cyle-bd:latest
+          ports:
+          - containerPort: 80
+        - name: nginx
+          image: nginx:stable-alpine
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources: {}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      imagePullSecrets:
+      - name: harbor-key
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn-unknown81311-server-svc
+  namespace: webapps-prod
+spec:
+  selector:
+    app: cdn-unknown81311-server
+    namespace: webapps-prod
+  ports:
+  - protocol: "TCP"
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+
+---
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bd.dotglitch.dev
+  namespace: webapps-prod
+spec:
+  commonName: bd.dotglitch.dev
+  dnsNames:
+    - bd.dotglitch.dev
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  secretName: bd.dotglitch.dev-tls
+
+---
+
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: bd.dotglitch.dev-ingress
+  namespace: webapps-prod
+spec:
+  entryPoints:
+   - web
+  routes:
+    - match: Host(`bd.dotglitch.dev`)
+      kind: Rule
+      services:
+      - name: cdn-unknown81311-server-svc
+        namespace: webapps-prod
+        port: 80
+
+---
+
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: bd.dotglitch.dev-secure-ingress
+  namespace: webapps-prod
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`bd.dotglitch.dev`)
+      services:
+        - name: cdn-unknown81311-server-svc
+          namespace: webapps-prod
+          port: 443
+  tls:
+    secretName: bd.dotglitch.dev-tls
+    namespace: webapps-prod
