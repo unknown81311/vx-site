@@ -152,14 +152,9 @@ spec:
             defaultMode: 420
       containers:
         - name: dotglitch
-          image: harbor.dotglitch.dev/library/cyle-bd:latest
+          image: harbor.dotglitch.dev/library/vx-site:latest
           ports:
           - containerPort: 80
-        - name: nginx
-          image: nginx:stable-alpine
-          ports:
-            - containerPort: 80
-              protocol: TCP
           resources: {}
           volumeMounts:
             - name: data
