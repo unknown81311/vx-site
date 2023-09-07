@@ -1,6 +1,6 @@
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs-extra');
 const multer = require('multer');
 
 const app = express();
@@ -15,8 +15,8 @@ const upload = multer({ storage: storage });
 app.post('/dev/upload', upload.single('file'), async (req, res) => {
   const uploadDir = path.join(__dirname, 'static');
 
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
+  if (!await fs.exists(uploadDir)) {
+    await fs.mkdir(uploadDir);
   }
 
   const file = req.file;
@@ -27,7 +27,7 @@ app.post('/dev/upload', upload.single('file'), async (req, res) => {
 
   const filePath = path.join(uploadDir, file.originalname);
 
-  fs.writeFileSync(filePath, file.buffer);
+  await fs.writeFile(filePath, file.buffer);
 
   res.send('File uploaded successfully!');
 });
