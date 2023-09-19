@@ -141,7 +141,7 @@ spec:
       creationTimestamp: null
       labels:
         app: cdn-unknown81311-server
-        namespace: webapps-prod
+#        namespace: webapps-prod
     spec:
       volumes:
         - name: data
@@ -251,4 +251,4 @@ spec:
           port: 443
   tls:
     secretName: bd.dotglitch.dev-tls
-    namespace: webapps-prod
+#    namespace: webapps-prod
