@@ -247,7 +247,7 @@ spec:
       services:
         - name: cdn-unknown81311-server-svc
           namespace: webapps-prod
-          port: 443
+          port: 80
   tls:
     secretName: bd.dotglitch.dev-tls
 #    namespace: webapps-prod
