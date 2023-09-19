@@ -134,8 +134,7 @@ spec:
   selector:
     matchLabels:
       app: cdn-unknown81311-server
-      namespace: webapps-prod
-
+#      namespace: webapps-prod
   template:
     metadata:
       creationTimestamp: null
