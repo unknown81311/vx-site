@@ -3,6 +3,7 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: pvc-unknown81311
+  namespace: webapps-prod
 spec:
   capacity:
     storage: 10Gi
