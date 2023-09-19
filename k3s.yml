@@ -190,7 +190,6 @@ metadata:
 spec:
   selector:
     app: cdn-unknown81311-server
-    namespace: webapps-prod
   ports:
   - protocol: "TCP"
     port: 80
